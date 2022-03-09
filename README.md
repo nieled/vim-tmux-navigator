@@ -1,7 +1,7 @@
 Vim Tmux Navigator
 ==================
 
-This plugin is a repackaging of [Mislav Marohnić's][] tmux-navigator
+This plugin is a repackaging of [Mislav Marohnić's](https://mislav.net/) tmux-navigator
 configuration described in [this gist][]. When combined with a set of tmux
 key bindings, the plugin will allow you to navigate seamlessly between
 vim and tmux splits using a consistent set of hotkeys.
@@ -47,6 +47,13 @@ Then run
 :PluginInstall
 ```
 
+If you are using Vim 8+, you don't need any plugin manager. Simply clone this repository inside `~/.vim/pack/plugin/start/` directory and restart Vim.
+
+```
+git clone git@github.com:christoomey/vim-tmux-navigator.git ~/.vim/pack/plugins/start/vim-tmux-navigator
+```
+
+
 ### tmux
 
 To configure the tmux side of this customization there are two options:
@@ -60,11 +67,21 @@ Add the following to your `~/.tmux.conf` file:
 # See: https://github.com/christoomey/vim-tmux-navigator
 is_vim="ps -o state= -o comm= -t '#{pane_tty}' \
     | grep -iqE '^[^TXZ ]+ +(\\S+\\/)?g?(view|n?vim?x?)(diff)?$'"
-bind-key -n C-h if-shell "$is_vim" "send-keys C-h"  "select-pane -L"
-bind-key -n C-j if-shell "$is_vim" "send-keys C-j"  "select-pane -D"
-bind-key -n C-k if-shell "$is_vim" "send-keys C-k"  "select-pane -U"
-bind-key -n C-l if-shell "$is_vim" "send-keys C-l"  "select-pane -R"
-bind-key -n C-\ if-shell "$is_vim" "send-keys C-\\" "select-pane -l"
+bind-key -n 'C-h' if-shell "$is_vim" 'send-keys C-h'  'select-pane -L'
+bind-key -n 'C-j' if-shell "$is_vim" 'send-keys C-j'  'select-pane -D'
+bind-key -n 'C-k' if-shell "$is_vim" 'send-keys C-k'  'select-pane -U'
+bind-key -n 'C-l' if-shell "$is_vim" 'send-keys C-l'  'select-pane -R'
+tmux_version='$(tmux -V | sed -En "s/^tmux ([0-9]+(.[0-9]+)?).*/\1/p")'
+if-shell -b '[ "$(echo "$tmux_version < 3.0" | bc)" = 1 ]' \
+    "bind-key -n 'C-\\' if-shell \"$is_vim\" 'send-keys C-\\'  'select-pane -l'"
+if-shell -b '[ "$(echo "$tmux_version >= 3.0" | bc)" = 1 ]' \
+    "bind-key -n 'C-\\' if-shell \"$is_vim\" 'send-keys C-\\\\'  'select-pane -l'"
+
+bind-key -T copy-mode-vi 'C-h' select-pane -L
+bind-key -T copy-mode-vi 'C-j' select-pane -D
+bind-key -T copy-mode-vi 'C-k' select-pane -U
+bind-key -T copy-mode-vi 'C-l' select-pane -R
+bind-key -T copy-mode-vi 'C-\' select-pane -l
 ```
 
 #### TPM
@@ -98,7 +115,7 @@ Add the following to your `~/.vimrc` to define your custom maps:
 ``` vim
 let g:tmux_navigator_no_mappings = 1
 
-nnoremap <silent> {Left-mapping} :TmuxNavigateLeft<cr>
+nnoremap <silent> {Left-Mapping} :TmuxNavigateLeft<cr>
 nnoremap <silent> {Down-Mapping} :TmuxNavigateDown<cr>
 nnoremap <silent> {Up-Mapping} :TmuxNavigateUp<cr>
 nnoremap <silent> {Right-Mapping} :TmuxNavigateRight<cr>
@@ -111,7 +128,10 @@ Left would be created with `nnoremap <silent> <c-h> :TmuxNavigateLeft<cr>`.
 
 ##### Autosave on leave
 
-You can configure the plugin to write the current buffer, or all buffers, when navigating from Vim to tmux. This functionality is exposed via the `g:tmux_navigator_save_on_switch` variable, which can have either of the following values:
+You can configure the plugin to write the current buffer, or all buffers, when
+navigating from Vim to tmux. This functionality is exposed via the
+`g:tmux_navigator_save_on_switch` variable, which can have either of the
+following values:
 
 Value  | Behavior
 ------ | ------
@@ -124,6 +144,39 @@ To enable this, add the following (with the desired value) to your ~/.vimrc:
 " Write all buffers before navigating from Vim to tmux pane
 let g:tmux_navigator_save_on_switch = 2
 ```
+
+##### Disable While Zoomed
+
+By default, if you zoom the tmux pane running Vim and then attempt to navigate
+"past" the edge of the Vim session, tmux will unzoom the pane. This is the
+default tmux behavior, but may be confusing if you've become accustomed to
+navigation "wrapping" around the sides due to this plugin.
+
+We provide an option, `g:tmux_navigator_disable_when_zoomed`, which can be used
+to disable this unzooming behavior, keeping all navigation within Vim until the
+tmux pane is explicitly unzoomed.
+
+To disable navigation when zoomed, add the following to your ~/.vimrc:
+
+```vim
+" Disable tmux navigator when zooming the Vim pane
+let g:tmux_navigator_disable_when_zoomed = 1
+```
+
+##### Preserve Zoom
+
+As noted above, navigating from a Vim pane to another tmux pane normally causes
+the window to be unzoomed. Some users may prefer the behavior of tmux's `-Z`
+option to `select-pane`, which keeps the window zoomed if it was zoomed. To
+enable this behavior, set the `g:tmux_navigator_preserve_zoom` option to `1`:
+
+```vim
+" If the tmux window is zoomed, keep it zoomed when moving from Vim to another pane
+let g:tmux_navigator_preserve_zoom = 1
+```
+
+Naturally, if `g:tmux_navigator_disable_when_zoomed` is enabled, this option
+will have no effect.
 
 #### Tmux
 
@@ -188,10 +241,17 @@ altered to avoid conflicting with the mappings from the plugin.
 
 Another option is that the pattern matching included in the `.tmux.conf` is
 not recognizing that Vim is active. To check that tmux is properly recognizing
-Vim, use the provided Vim command `:TmuxPaneCurrentCommand`. The output of
-that command should be a string like 'vim', 'Vim', 'vimdiff', etc. If you
-encounter a different output please [open an issue][] with as much info about
-your OS, Vim version, and tmux version as possible.
+Vim, use the provided Vim command `:TmuxNavigatorProcessList`. The output of
+that command should be a list like:
+
+```
+Ss   -zsh
+S+   vim
+S+   tmux
+```
+
+If you encounter a different output please [open an issue][] with as much info
+about your OS, Vim version, and tmux version as possible.
 
 [open an issue]: https://github.com/christoomey/vim-tmux-navigator/issues/new
 
@@ -212,6 +272,12 @@ Consider moving code from your shell's non-interactive rc file (e.g.,
 `~/.zshenv`) into the interactive startup file (e.g., `~/.zshrc`) as Vim only
 sources the non-interactive config.
 
+### It doesn't work in Vim's `terminal` mode
+
+Terminal mode is currently unsupported as adding this plugin's mappings there
+causes conflict with movement mappings for FZF (it also uses terminal mode).
+There's a conversation about this in https://github.com/christoomey/vim-tmux-navigator/pull/172
+
 ### It Doesn't Work in tmate
 
 [tmate][] is a tmux fork that aids in setting up remote pair programming
@@ -223,32 +289,6 @@ detail.
 
 [tmate]: http://tmate.io/
 
-### It Doesn't Work in Neovim (specifically C-h)
-
-[Neovim][] is a Vim fork. While Neovim is intended to be a drop-in replacement
-for Vim, it does handle some keyboard input differently than Vim does. Some
-users (including those on OS X) may find that all of their pane-switching
-keybindings work with the exception of <kbd>Ctrl</kbd>+<kbd>h</kbd>, which
-instead returns a backspace. The explanation of what is going on vastly exceeds
-the scope of this guide, but you can read the discussion on this Neovim
-[issue][].
-
-The simplest and hackiest solution is to add the following to your Neovim
-`init.vim`, capturing the <kbd>Backspace</kbd> that Neovim receives when
-<kbd>Ctrl</kbd>+<kbd>h</kbd> is typed in normal mode:
-
-```vimL
-nnoremap <silent> <BS> :TmuxNavigateLeft<cr>
-```
-
-A more complete and less-hacky solution would be to update the incorrect
-terminfo entry that is part of the problem on OS X (and some Linux
-distributions) as described in this [comment][].
-
-[Neovim]: https://neovim.io/
-[issue]: https://github.com/neovim/neovim/issues/2048
-[comment]: https://github.com/neovim/neovim/issues/2048#issuecomment-78045837
-
 ### It Still Doesn't Work!!!
 
 The tmux configuration uses an inlined grep pattern match to help determine if
@@ -257,7 +297,6 @@ not happening as expected, you can try using [Mislav's original external
 script][] which has a more robust check.
 
 [Brian Hogan]: https://twitter.com/bphogan
-[Mislav Marohnić's]: http://mislav.uniqpath.com/
 [Mislav's original external script]: https://github.com/mislav/dotfiles/blob/master/bin/tmux-vim-select-pane
 [Vundle]: https://github.com/gmarik/vundle
 [TPM]: https://github.com/tmux-plugins/tpm
